@@ -14,13 +14,13 @@ KEYSTORE_PASS="changeit"
 VALIDITY=3650
 
 echo ""
-echo "1. Creating Root CA..."
+echo "1. Creating Root CA (for SMP only)..."
 openssl genrsa -out ca-key.pem 4096
 openssl req -new -x509 -days $VALIDITY -key ca-key.pem -out ca-cert.pem \
     -subj "/C=XX/ST=Test/L=Test/O=Local Peppol Test/OU=Test CA/CN=Local Peppol Test CA"
 
 echo ""
-echo "2. Creating SMP certificate..."
+echo "2. Creating SMP certificate (CA-signed)..."
 openssl genrsa -out smp-key.pem 2048
 openssl req -new -key smp-key.pem -out smp.csr \
     -subj "/C=XX/ST=Test/L=Test/O=Local Peppol Test/OU=SMP/CN=smp.local"
@@ -39,15 +39,14 @@ keytool -importkeystore \
     -noprompt 2>/dev/null || true
 
 echo ""
-echo "3. Creating Access Point 1 certificate..."
+echo "3. Creating Access Point 1 certificate (SELF-SIGNED for LOCAL mode)..."
 openssl genrsa -out ap1-key.pem 2048
-openssl req -new -key ap1-key.pem -out ap1.csr \
+# Create SELF-SIGNED certificate (required for Oxalis LOCAL mode)
+openssl req -new -x509 -days $VALIDITY -key ap1-key.pem -out ap1-cert.pem \
     -subj "/C=XX/ST=Test/L=Test/O=Local Peppol Test/OU=AP1/CN=ap1.local"
-openssl x509 -req -days $VALIDITY -in ap1.csr -CA ca-cert.pem -CAkey ca-key.pem \
-    -CAcreateserial -out ap1-cert.pem
 
 openssl pkcs12 -export -in ap1-cert.pem -inkey ap1-key.pem \
-    -certfile ca-cert.pem -out ap1-keystore.p12 \
+    -out ap1-keystore.p12 \
     -name ap1 -passout pass:$KEYSTORE_PASS
 
 keytool -importkeystore \
@@ -56,15 +55,14 @@ keytool -importkeystore \
     -noprompt 2>/dev/null || true
 
 echo ""
-echo "4. Creating Access Point 2 certificate..."
+echo "4. Creating Access Point 2 certificate (SELF-SIGNED for LOCAL mode)..."
 openssl genrsa -out ap2-key.pem 2048
-openssl req -new -key ap2-key.pem -out ap2.csr \
+# Create SELF-SIGNED certificate (required for Oxalis LOCAL mode)
+openssl req -new -x509 -days $VALIDITY -key ap2-key.pem -out ap2-cert.pem \
     -subj "/C=XX/ST=Test/L=Test/O=Local Peppol Test/OU=AP2/CN=ap2.local"
-openssl x509 -req -days $VALIDITY -in ap2.csr -CA ca-cert.pem -CAkey ca-key.pem \
-    -CAcreateserial -out ap2-cert.pem
 
 openssl pkcs12 -export -in ap2-cert.pem -inkey ap2-key.pem \
-    -certfile ca-cert.pem -out ap2-keystore.p12 \
+    -out ap2-keystore.p12 \
     -name ap2 -passout pass:$KEYSTORE_PASS
 
 keytool -importkeystore \
@@ -73,8 +71,17 @@ keytool -importkeystore \
     -noprompt 2>/dev/null || true
 
 echo ""
-echo "5. Creating truststore with CA certificate..."
+echo "5. Creating truststore with CA certificate AND AP self-signed certs..."
+# Import CA cert
 keytool -import -trustcacerts -alias localca -file ca-cert.pem \
+    -keystore truststore.jks -storepass $KEYSTORE_PASS -noprompt 2>/dev/null || true
+
+# Import AP1 self-signed cert so AP2 can trust it
+keytool -import -trustcacerts -alias ap1 -file ap1-cert.pem \
+    -keystore truststore.jks -storepass $KEYSTORE_PASS -noprompt 2>/dev/null || true
+
+# Import AP2 self-signed cert so AP1 can trust it
+keytool -import -trustcacerts -alias ap2 -file ap2-cert.pem \
     -keystore truststore.jks -storepass $KEYSTORE_PASS -noprompt 2>/dev/null || true
 
 # Also create PKCS12 truststore
@@ -96,8 +103,10 @@ echo ""
 echo "Keystore password for all files: $KEYSTORE_PASS"
 echo ""
 echo "Summary:"
-echo "  - ca-cert.pem / ca-key.pem     : Root CA"
-echo "  - smp-keystore.jks             : SMP signing keystore"
-echo "  - ap1-keystore.jks             : Access Point 1 keystore"
-echo "  - ap2-keystore.jks             : Access Point 2 keystore"  
-echo "  - truststore.jks               : Trust store with CA cert"
+echo "  - ca-cert.pem / ca-key.pem     : Root CA (for SMP)"
+echo "  - smp-keystore.jks             : SMP signing keystore (CA-signed)"
+echo "  - ap1-keystore.jks             : Access Point 1 keystore (SELF-SIGNED)"
+echo "  - ap2-keystore.jks             : Access Point 2 keystore (SELF-SIGNED)"
+echo "  - truststore.jks               : Trust store with CA + AP certs"
+echo ""
+echo "NOTE: AP certificates are SELF-SIGNED for Oxalis LOCAL mode compatibility."
