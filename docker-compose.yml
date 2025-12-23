@@ -1,0 +1,91 @@
+# =============================================================================
+# Local Peppol Sandbox Network
+# =============================================================================
+# Components:
+#   - SMP (phoss-smp): Registry/addressbook on port 8080
+#   - AP1 (Oxalis): Access Point 1 on port 8081
+#   - AP2 (Oxalis): Access Point 2 on port 8082
+#
+# Usage:
+#   1. Run: ./scripts/generate-certs.sh (if certs don't exist)
+#   2. Run: docker-compose up -d
+#   3. Access SMP at: http://localhost:8080
+#      Login: admin@helger.com / password
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # SMP - Service Metadata Publisher (the addressbook)
+  # ===========================================================================
+  smp:
+    image: phelger/phoss-smp-xml:latest
+    container_name: peppol-smp
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./smp-config/application.properties:/config/application.properties:ro
+      - ./certs:/config/certs:ro
+      - ./smp-config:/config
+      - ./data:/data
+    environment:
+      - CONFIG_FILE=/config/application.properties
+      - JAVA_OPTS=-Xmx512m
+    networks:
+      - peppol-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ===========================================================================
+  # Access Point 1 - Sender/Receiver (using pre-built Oxalis image)
+  # ===========================================================================
+  ap1:
+    image: norstella/oxalis-as4:latest
+    container_name: peppol-ap1
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./ap1-config/oxalis.conf:/oxalis/conf/oxalis.conf:ro
+      - ./certs/ap1-keystore.jks:/oxalis/conf/ap1-keystore.jks:ro
+      - ./certs/truststore.jks:/oxalis/conf/truststore.jks:ro
+      - ap1-inbound:/var/peppol/inbound
+    environment:
+      - JAVA_OPTS=-Xmx512m
+    networks:
+      - peppol-net
+    depends_on:
+      smp:
+        condition: service_healthy
+
+  # ===========================================================================
+  # Access Point 2 - Sender/Receiver (using pre-built Oxalis image)
+  # ===========================================================================
+  ap2:
+    image: norstella/oxalis-as4:latest
+    container_name: peppol-ap2
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./ap2-config/oxalis.conf:/oxalis/conf/oxalis.conf:ro
+      - ./certs/ap2-keystore.jks:/oxalis/conf/ap2-keystore.jks:ro
+      - ./certs/truststore.jks:/oxalis/conf/truststore.jks:ro
+      - ap2-inbound:/var/peppol/inbound
+    environment:
+      - JAVA_OPTS=-Xmx512m
+    networks:
+      - peppol-net
+    depends_on:
+      smp:
+        condition: service_healthy
+
+networks:
+  peppol-net:
+    driver: bridge
+
+volumes:
+  smp-data:
+  ap1-inbound:
+  ap2-inbound:
