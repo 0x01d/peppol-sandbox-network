@@ -77,7 +77,7 @@ keytool -import -trustcacerts -alias localca -file ca-cert.pem \
     -keystore truststore.jks -storepass $KEYSTORE_PASS -noprompt 2>/dev/null || true
 
 # Import AP1 self-signed cert so AP2 can trust it
-keytool -import -trustcacerts -alias ap1 -file ap1-cert.pem \
+keytool -import -trustcacerts -alias ap -file ap1-cert.pem \
     -keystore truststore.jks -storepass $KEYSTORE_PASS -noprompt 2>/dev/null || true
 
 # Import AP2 self-signed cert so AP1 can trust it
